@@ -2,6 +2,7 @@ package br.gov.mma.biometric.ui;
 
 import br.gov.mma.biometric.*;
 import br.gov.mma.biometric.model.*;
+import br.gov.mma.biometric.info.*;
 import com.github.sarxos.webcam.Webcam;
 import com.github.sarxos.webcam.WebcamPanel;
 import com.github.sarxos.webcam.WebcamResolution;
@@ -28,6 +29,10 @@ public class BiometricAuthenticationAppWithWebcam extends JFrame {
     private JTextArea logArea;
     private JCheckBox webcamCheckbox;
     
+    private AccessLevelInfoManager gerenciadorInfo;
+    private UserSessionManager gerenciadorSessao;
+    private DynamicInfoPanel painelInfoDinamico;
+    
     public BiometricAuthenticationAppWithWebcam() throws CryptoException {
         // Inicializar componentes do sistema
         this.cryptoService = new CryptoServiceImpl();
@@ -38,6 +43,10 @@ public class BiometricAuthenticationAppWithWebcam extends JFrame {
         this.authenticator = new BiometricAuthenticatorImpl(
             userDatabase, sessionManager, auditLog, cryptoService
         );
+        
+        // Inicializar gerenciadores de informações e sessão
+        this.gerenciadorInfo = new AccessLevelInfoManagerImpl();
+        this.gerenciadorSessao = new UserSessionManagerImpl();
         
         // Sempre usar webcam (sem modo simulação)
         this.useWebcam = true;
@@ -366,38 +375,8 @@ public class BiometricAuthenticationAppWithWebcam extends JFrame {
     }
     
     private JPanel createInfoPanel() {
-        JPanel panel = new JPanel(new BorderLayout(10, 10));
-        panel.setBackground(Color.WHITE);
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-        
-        JTextArea infoArea = new JTextArea();
-        infoArea.setEditable(false);
-        infoArea.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        infoArea.setLineWrap(true);
-        infoArea.setWrapStyleWord(true);
-        
-        String info = "SISTEMA DE AUTENTICAÇÃO BIOMÉTRICA\n" +
-                     "Ministério do Meio Ambiente\n\n" +
-                     "Este sistema controla o acesso a informações estratégicas sobre propriedades rurais\n" +
-                     "que utilizam agrotóxicos proibidos.\n\n" +
-                     "NÍVEIS DE ACESSO:\n\n" +
-                     "• PÚBLICO (Nível 1)\n" +
-                     "  Informações gerais acessíveis a todos os funcionários\n\n" +
-                     "• RESTRITO (Nível 2)\n" +
-                     "  Informações restritas aos diretores de divisões\n\n" +
-                     "• CONFIDENCIAL (Nível 3)\n" +
-                     "  Informações confidenciais acessíveis apenas ao Ministro\n\n" +
-                     "USUÁRIOS DE EXEMPLO:\n\n" +
-                     "• USER-001 (João Silva) - Funcionário Público - Nível PÚBLICO\n" +
-                     "• DIR-001 (Maria Santos) - Diretora - Nível RESTRITO\n" +
-                     "• MIN-001 (Carlos Oliveira) - Ministro - Nível CONFIDENCIAL";
-        
-        infoArea.setText(info);
-        
-        JScrollPane scrollPane = new JScrollPane(infoArea);
-        panel.add(scrollPane, BorderLayout.CENTER);
-        
-        return panel;
+        painelInfoDinamico = new DynamicInfoPanelImpl(gerenciadorSessao);
+        return painelInfoDinamico.obterComponenteSwing();
     }
     
     private JPanel createLogPanel() {
@@ -462,6 +441,9 @@ public class BiometricAuthenticationAppWithWebcam extends JFrame {
                 
                 JOptionPane.showMessageDialog(this, message, "Sucesso", JOptionPane.INFORMATION_MESSAGE);
                 log("Autenticação bem-sucedida: " + result.getUser().getName());
+                
+                // Atualizar painel de informações
+                atualizarPainelAposAutenticacao(result);
             } else {
                 String message = "❌ AUTENTICAÇÃO FALHOU\n\n" +
                                "Motivo: " + result.getMessage();
@@ -552,6 +534,33 @@ public class BiometricAuthenticationAppWithWebcam extends JFrame {
         if (logArea != null) {
             logArea.append("[" + java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")) + "] " + message + "\n");
             logArea.setCaretPosition(logArea.getDocument().getLength());
+        }
+    }
+    
+    private void atualizarPainelAposAutenticacao(AuthenticationResult resultado) {
+        try {
+            // Extrair dados do resultado
+            User usuario = resultado.getUser();
+            AccessLevel nivelConcedido = resultado.getGrantedLevel();
+            String token = resultado.getSessionToken();
+            
+            // Iniciar sessão
+            gerenciadorSessao.iniciarSessao(usuario, nivelConcedido, token);
+            
+            // Recuperar informações
+            InformaçõesPorNível informacoes = gerenciadorInfo.obterInformacoes(nivelConcedido);
+            
+            // Atualizar painel
+            if (informacoes != null) {
+                painelInfoDinamico.atualizarComInformacoes(informacoes);
+                log("Painel de informações atualizado para: " + usuario.getName());
+            } else {
+                log("Erro: Informações não disponíveis para o nível: " + nivelConcedido.getDescription());
+            }
+            
+        } catch (Exception e) {
+            log("Erro ao atualizar painel: " + e.getMessage());
+            e.printStackTrace();
         }
     }
     
