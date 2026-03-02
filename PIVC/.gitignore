@@ -1,0 +1,35 @@
+# Compiled class files
+*.class
+bin/
+target/
+
+# Log files
+*.log
+audit.log
+
+# Package Files
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Kiro specs (optional - remova se quiser incluir)
+.kiro/
+
+# Test files (opcional)
+src/test/
