@@ -27,6 +27,7 @@ public class WebcamFacialScanner implements BiometricScanner {
     private static final int TEMPLATE_SIZE = 512;
     
     private Webcam webcam;
+    private DeterministicTemplateGenerator templateGenerator;
     
     /**
      * Construtor que inicializa a webcam padrão.
@@ -42,6 +43,9 @@ public class WebcamFacialScanner implements BiometricScanner {
             
             // Configurar resolução
             this.webcam.setViewSize(new Dimension(CAPTURE_WIDTH, CAPTURE_HEIGHT));
+            
+            // Inicializar gerador de templates determinísticos
+            this.templateGenerator = new DeterministicTemplateGeneratorImpl();
             
         } catch (Exception e) {
             throw new IllegalStateException("Erro ao inicializar webcam: " + e.getMessage(), e);
@@ -90,6 +94,38 @@ public class WebcamFacialScanner implements BiometricScanner {
             throw new BiometricCaptureException("Captura facial interrompida", e);
         } catch (Exception e) {
             throw new BiometricCaptureException("Erro ao capturar imagem facial: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Captura um template biométrico determinístico baseado no userId.
+     * 
+     * Este método é usado para testes e simulação, gerando um template
+     * determinístico que é sempre o mesmo para o mesmo userId.
+     * 
+     * @param userId identificador do usuário
+     * @return dados biométricos contendo template determinístico
+     * @throws BiometricCaptureException se ocorrer erro durante a geração
+     */
+    public BiometricData capture(String userId) throws BiometricCaptureException {
+        try {
+            if (userId == null || userId.isEmpty()) {
+                throw new BiometricCaptureException("userId não pode ser nulo ou vazio");
+            }
+            
+            // Gerar template determinístico baseado no userId
+            byte[] template = templateGenerator.generateDeterministicTemplate(userId);
+            
+            // Calcular qualidade do template
+            double quality = calculateQuality(template);
+            
+            // Criar e retornar dados biométricos
+            return new BiometricData(template, BiometricType.FACIAL_RECOGNITION, quality);
+            
+        } catch (BiometricCaptureException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BiometricCaptureException("Erro ao gerar template determinístico: " + e.getMessage(), e);
         }
     }
     

@@ -29,6 +29,7 @@ public class BiometricAuthenticatorImpl implements BiometricAuthenticator {
     private final AuditLog auditLog;
     private final BiometricMatcherFactory matcherFactory;
     private final CryptoService cryptoService;
+    private final DeterministicTemplateGenerator templateGenerator;
     
     /**
      * Construtor que inicializa o autenticador com suas dependências.
@@ -37,12 +38,14 @@ public class BiometricAuthenticatorImpl implements BiometricAuthenticator {
      * @param sessionManager gerenciador de sessões
      * @param auditLog log de auditoria
      * @param cryptoService serviço de criptografia
+     * @param templateGenerator gerador de templates determinísticos
      * @throws IllegalArgumentException se alguma dependência for nula
      */
     public BiometricAuthenticatorImpl(UserDatabase userDatabase, 
                                      SessionManager sessionManager,
                                      AuditLog auditLog,
-                                     CryptoService cryptoService) {
+                                     CryptoService cryptoService,
+                                     DeterministicTemplateGenerator templateGenerator) {
         if (userDatabase == null) {
             throw new IllegalArgumentException("UserDatabase não pode ser nulo");
         }
@@ -55,11 +58,15 @@ public class BiometricAuthenticatorImpl implements BiometricAuthenticator {
         if (cryptoService == null) {
             throw new IllegalArgumentException("CryptoService não pode ser nulo");
         }
+        if (templateGenerator == null) {
+            throw new IllegalArgumentException("DeterministicTemplateGenerator não pode ser nulo");
+        }
         
         this.userDatabase = userDatabase;
         this.sessionManager = sessionManager;
         this.auditLog = auditLog;
         this.cryptoService = cryptoService;
+        this.templateGenerator = templateGenerator;
         this.matcherFactory = new BiometricMatcherFactory();
     }
     

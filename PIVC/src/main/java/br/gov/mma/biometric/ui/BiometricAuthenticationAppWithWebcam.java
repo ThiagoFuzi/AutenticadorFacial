@@ -20,6 +20,7 @@ public class BiometricAuthenticationAppWithWebcam extends JFrame {
     private final BiometricAuthenticator authenticator;
     private BiometricScanner scanner;
     private final CryptoService cryptoService;
+    private final DeterministicTemplateGenerator templateGenerator;
     private boolean useWebcam;
     private Webcam webcam;
     private WebcamPanel webcamPanel;
@@ -39,9 +40,10 @@ public class BiometricAuthenticationAppWithWebcam extends JFrame {
         UserDatabase userDatabase = new InMemoryUserDatabase(cryptoService);
         SessionManager sessionManager = new SessionManagerImpl();
         AuditLog auditLog = new AuditLogImpl();
+        this.templateGenerator = new DeterministicTemplateGeneratorImpl();
         
         this.authenticator = new BiometricAuthenticatorImpl(
-            userDatabase, sessionManager, auditLog, cryptoService
+            userDatabase, sessionManager, auditLog, cryptoService, templateGenerator
         );
         
         // Inicializar gerenciadores de informações e sessão
@@ -505,22 +507,22 @@ public class BiometricAuthenticationAppWithWebcam extends JFrame {
             // Usuário 1: Funcionário Público
             User user1 = new User("USER-001", "João Silva", "Funcionário Público", 
                                  AccessLevel.PUBLIC, null, BiometricType.FACIAL_RECOGNITION, true);
-            BiometricData bio1 = new BiometricData(new byte[512], BiometricType.FACIAL_RECOGNITION, 0.95);
-            new java.util.Random(12345).nextBytes(bio1.getTemplate());
+            BiometricData bio1 = new BiometricData(templateGenerator.generateDeterministicTemplate("USER-001"), 
+                                                   BiometricType.FACIAL_RECOGNITION, 0.95);
             authenticator.enrollUser(user1, bio1);
             
             // Usuário 2: Diretora
             User user2 = new User("DIR-001", "Maria Santos", "Diretora de Divisão", 
                                  AccessLevel.RESTRICTED, null, BiometricType.FACIAL_RECOGNITION, true);
-            BiometricData bio2 = new BiometricData(new byte[512], BiometricType.FACIAL_RECOGNITION, 0.92);
-            new java.util.Random(67890).nextBytes(bio2.getTemplate());
+            BiometricData bio2 = new BiometricData(templateGenerator.generateDeterministicTemplate("DIR-001"), 
+                                                   BiometricType.FACIAL_RECOGNITION, 0.92);
             authenticator.enrollUser(user2, bio2);
             
             // Usuário 3: Ministro
             User user3 = new User("MIN-001", "Carlos Oliveira", "Ministro do Meio Ambiente", 
                                  AccessLevel.CONFIDENTIAL, null, BiometricType.FACIAL_RECOGNITION, true);
-            BiometricData bio3 = new BiometricData(new byte[512], BiometricType.FACIAL_RECOGNITION, 0.98);
-            new java.util.Random(11111).nextBytes(bio3.getTemplate());
+            BiometricData bio3 = new BiometricData(templateGenerator.generateDeterministicTemplate("MIN-001"), 
+                                                   BiometricType.FACIAL_RECOGNITION, 0.98);
             authenticator.enrollUser(user3, bio3);
             
             log("Usuários de exemplo cadastrados com sucesso");
