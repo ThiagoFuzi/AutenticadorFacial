@@ -130,206 +130,160 @@ public class WebcamFacialScanner implements BiometricScanner {
     }
     
     /**
-     * Extrai um template biométrico de uma imagem facial.
-     * 
-     * Este algoritmo extrai características robustas que são consistentes
-     * entre capturas da mesma pessoa:
-     * 1. Converte a imagem para escala de cinza
-     * 2. Redimensiona para tamanho padrão (64x64)
-     * 3. Divide em regiões e extrai histogramas locais
-     * 4. Calcula gradientes e bordas
-     * 5. Gera um template de 512 bytes com características estáveis
-     * 
-     * Em produção, seria usado um algoritmo de reconhecimento facial
-     * como FaceNet, OpenFace, ou similar.
-     * 
+     * Extrai um template biométrico facial baseado em LBP (Local Binary Patterns).
+     *
+     * LBP é o padrão clássico em reconhecimento facial: para cada pixel,
+     * compara com seus 8 vizinhos da vizinhança 3x3 e gera um código binário
+     * de 8 bits (0-255) que descreve o padrão local de textura. Histogramas
+     * de LBP por região capturam identidade facial de forma muito mais
+     * discriminativa que histogramas de intensidade ou gradientes médios,
+     * e são robustos a variação de iluminação (invariantes a transformações
+     * monotônicas de intensidade).
+     *
+     * Algoritmo:
+     * 1. Converte para escala de cinza
+     * 2. Extrai região central (60%) — ignora fundo
+     * 3. Redimensiona para 64x64
+     * 4. Calcula código LBP de cada pixel
+     * 5. Divide em grade 4x4 (16 células de 16x16 pixels)
+     * 6. Por célula, calcula histograma LBP com 32 bins normalizados
+     * 7. 16 células × 32 bins = 512 bytes
+     *
+     * Em produção seria usado FaceNet, OpenFace ou similar com landmarks.
+     *
      * @param image imagem capturada da webcam
      * @return template biométrico de 512 bytes
      */
     private byte[] extractFacialTemplate(BufferedImage image) throws Exception {
-        // Converter para escala de cinza
         BufferedImage grayImage = convertToGrayscale(image);
-        
-        // Redimensionar para tamanho padrão (64x64)
-        BufferedImage resized = resizeImage(grayImage, 64, 64);
-        
-        // Template final de 512 bytes
-        byte[] template = new byte[TEMPLATE_SIZE];
-        int offset = 0;
-        
-        // Parte 1: Histograma global (256 bytes)
-        // Histogramas são robustos a pequenas variações
-        byte[] globalHistogram = extractGlobalHistogram(resized);
-        System.arraycopy(globalHistogram, 0, template, offset, 256);
-        offset += 256;
-        
-        // Parte 2: Histogramas locais de 8 regiões (128 bytes = 8 regiões x 16 bins)
-        byte[] localHistograms = extractLocalHistograms(resized, 8);
-        System.arraycopy(localHistograms, 0, template, offset, 128);
-        offset += 128;
-        
-        // Parte 3: Gradientes médios por região (64 bytes = 8 regiões x 8 valores)
-        byte[] gradients = extractGradientFeatures(resized, 8);
-        System.arraycopy(gradients, 0, template, offset, 64);
-        offset += 64;
-        
-        // Parte 4: Características de textura (64 bytes)
-        byte[] texture = extractTextureFeatures(resized);
-        System.arraycopy(texture, 0, template, offset, 64);
-        
-        return template;
+        BufferedImage centralRegion = extractCentralRegion(grayImage, 0.6);
+        BufferedImage resized = resizeImage(centralRegion, 64, 64);
+
+        int[][] lbpMap = computeLBP(resized);
+        return computeLBPHistogramTemplate(lbpMap, 4, 32);
     }
-    
+
     /**
-     * Extrai histograma global da imagem.
+     * Extrai a região central da imagem ignorando bordas (fundo).
      */
-    private byte[] extractGlobalHistogram(BufferedImage image) {
-        int[] histogram = new int[256];
-        
-        // Contar pixels
-        for (int y = 0; y < image.getHeight(); y++) {
-            for (int x = 0; x < image.getWidth(); x++) {
-                int rgb = image.getRGB(x, y);
-                int gray = (rgb >> 16) & 0xFF;
-                histogram[gray]++;
+    private BufferedImage extractCentralRegion(BufferedImage image, double percentage) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        int newWidth = (int) (width * percentage);
+        int newHeight = (int) (height * percentage);
+        int startX = (width - newWidth) / 2;
+        int startY = (height - newHeight) / 2;
+        return image.getSubimage(startX, startY, newWidth, newHeight);
+    }
+
+    /**
+     * Calcula o mapa LBP (Local Binary Pattern) da imagem.
+     *
+     * Aplica box blur 3x3 antes do LBP: sem isso, ruído de pixel ±1 flippa bits
+     * do código com facilidade, inflando o chi² entre capturas da mesma pessoa
+     * e impedindo o reconhecimento. Suavizar estabiliza as comparações de
+     * vizinhança sem apagar a estrutura facial relevante.
+     */
+    private int[][] computeLBP(BufferedImage image) {
+        int w = image.getWidth();
+        int h = image.getHeight();
+
+        int[][] gray = new int[h][w];
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                gray[y][x] = (image.getRGB(x, y) >> 16) & 0xFF;
             }
         }
-        
-        // Normalizar para bytes
-        byte[] result = new byte[256];
-        int totalPixels = image.getWidth() * image.getHeight();
-        for (int i = 0; i < 256; i++) {
-            result[i] = (byte) ((histogram[i] * 255) / totalPixels);
-        }
-        
-        return result;
-    }
-    
-    /**
-     * Extrai histogramas locais de múltiplas regiões.
-     */
-    private byte[] extractLocalHistograms(BufferedImage image, int numRegions) {
-        int regionWidth = image.getWidth() / (numRegions / 2);
-        int regionHeight = image.getHeight() / 2;
-        int binsPerRegion = 16; // Reduzido para caber no espaço
-        
-        byte[] result = new byte[numRegions * binsPerRegion];
-        int offset = 0;
-        
-        for (int ry = 0; ry < 2; ry++) {
-            for (int rx = 0; rx < numRegions / 2; rx++) {
-                int startX = rx * regionWidth;
-                int startY = ry * regionHeight;
-                int endX = Math.min(startX + regionWidth, image.getWidth());
-                int endY = Math.min(startY + regionHeight, image.getHeight());
-                
-                // Histograma simplificado com 16 bins
-                int[] histogram = new int[binsPerRegion];
-                int pixelCount = 0;
-                
-                for (int y = startY; y < endY; y++) {
-                    for (int x = startX; x < endX; x++) {
-                        int rgb = image.getRGB(x, y);
-                        int gray = (rgb >> 16) & 0xFF;
-                        int bin = gray / (256 / binsPerRegion);
-                        histogram[bin]++;
-                        pixelCount++;
+
+        int[][] smoothed = boxBlur3x3(gray, h, w);
+
+        int[] dx = {-1, 0, 1, 1, 1, 0, -1, -1};
+        int[] dy = {-1, -1, -1, 0, 1, 1, 1, 0};
+
+        int[][] lbp = new int[h][w];
+        for (int y = 1; y < h - 1; y++) {
+            for (int x = 1; x < w - 1; x++) {
+                int center = smoothed[y][x];
+                int code = 0;
+                for (int i = 0; i < 8; i++) {
+                    if (smoothed[y + dy[i]][x + dx[i]] >= center) {
+                        code |= (1 << i);
                     }
                 }
-                
-                // Normalizar
-                for (int i = 0; i < binsPerRegion; i++) {
-                    result[offset++] = (byte) ((histogram[i] * 255) / Math.max(1, pixelCount));
-                }
+                lbp[y][x] = code;
             }
         }
-        
-        return result;
+        return lbp;
     }
-    
+
     /**
-     * Extrai características de gradiente.
+     * Box blur 3x3 com tratamento de borda por amostragem disponível.
      */
-    private byte[] extractGradientFeatures(BufferedImage image, int numRegions) {
-        int regionWidth = image.getWidth() / (numRegions / 2);
-        int regionHeight = image.getHeight() / 2;
-        int valuesPerRegion = 8;
-        
-        byte[] result = new byte[numRegions * valuesPerRegion];
-        int offset = 0;
-        
-        for (int ry = 0; ry < 2; ry++) {
-            for (int rx = 0; rx < numRegions / 2; rx++) {
-                int startX = rx * regionWidth;
-                int startY = ry * regionHeight;
-                int endX = Math.min(startX + regionWidth - 1, image.getWidth() - 1);
-                int endY = Math.min(startY + regionHeight - 1, image.getHeight() - 1);
-                
-                double sumGradX = 0, sumGradY = 0;
+    private int[][] boxBlur3x3(int[][] src, int h, int w) {
+        int[][] dst = new int[h][w];
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int sum = 0;
                 int count = 0;
-                
+                for (int oy = -1; oy <= 1; oy++) {
+                    for (int ox = -1; ox <= 1; ox++) {
+                        int ny = y + oy;
+                        int nx = x + ox;
+                        if (ny >= 0 && ny < h && nx >= 0 && nx < w) {
+                            sum += src[ny][nx];
+                            count++;
+                        }
+                    }
+                }
+                dst[y][x] = sum / count;
+            }
+        }
+        return dst;
+    }
+
+    /**
+     * Constrói o template como histogramas LBP por célula da grade.
+     *
+     * @param lbp mapa LBP (códigos 0-255 por pixel)
+     * @param gridSize tamanho da grade (gridSize × gridSize células)
+     * @param bins número de bins por histograma de célula
+     * @return template de gridSize*gridSize*bins bytes (normalizados 0-255)
+     */
+    private byte[] computeLBPHistogramTemplate(int[][] lbp, int gridSize, int bins) {
+        int h = lbp.length;
+        int w = lbp[0].length;
+        int cellH = h / gridSize;
+        int cellW = w / gridSize;
+        int binDivisor = 256 / bins;
+
+        byte[] template = new byte[gridSize * gridSize * bins];
+        int offset = 0;
+
+        for (int gy = 0; gy < gridSize; gy++) {
+            for (int gx = 0; gx < gridSize; gx++) {
+                int startX = gx * cellW;
+                int startY = gy * cellH;
+                int endX = (gx == gridSize - 1) ? w : startX + cellW;
+                int endY = (gy == gridSize - 1) ? h : startY + cellH;
+
+                int[] hist = new int[bins];
+                int count = 0;
                 for (int y = startY; y < endY; y++) {
                     for (int x = startX; x < endX; x++) {
-                        int current = (image.getRGB(x, y) >> 16) & 0xFF;
-                        int right = (image.getRGB(x + 1, y) >> 16) & 0xFF;
-                        int down = (image.getRGB(x, y + 1) >> 16) & 0xFF;
-                        
-                        sumGradX += Math.abs(right - current);
-                        sumGradY += Math.abs(down - current);
+                        int binIdx = Math.min(bins - 1, lbp[y][x] / binDivisor);
+                        hist[binIdx]++;
                         count++;
                     }
                 }
-                
-                double avgGradX = sumGradX / Math.max(1, count);
-                double avgGradY = sumGradY / Math.max(1, count);
-                
-                // Preencher com valores derivados
-                for (int i = 0; i < valuesPerRegion; i++) {
-                    if (i % 2 == 0) {
-                        result[offset++] = (byte) avgGradX;
-                    } else {
-                        result[offset++] = (byte) avgGradY;
-                    }
+
+                int total = Math.max(1, count);
+                for (int b = 0; b < bins; b++) {
+                    template[offset++] = (byte) Math.min(255, (hist[b] * 255) / total);
                 }
             }
         }
-        
-        return result;
-    }
-    
-    /**
-     * Extrai características de textura.
-     */
-    private byte[] extractTextureFeatures(BufferedImage image) {
-        byte[] result = new byte[64];
-        
-        // Calcular estatísticas simples de textura
-        double[] stats = new double[8];
-        
-        for (int y = 0; y < image.getHeight() - 1; y++) {
-            for (int x = 0; x < image.getWidth() - 1; x++) {
-                int current = (image.getRGB(x, y) >> 16) & 0xFF;
-                int right = (image.getRGB(x + 1, y) >> 16) & 0xFF;
-                int down = (image.getRGB(x, y + 1) >> 16) & 0xFF;
-                
-                stats[0] += current;
-                stats[1] += current * current;
-                stats[2] += Math.abs(right - current);
-                stats[3] += Math.abs(down - current);
-            }
-        }
-        
-        int totalPixels = image.getWidth() * image.getHeight();
-        for (int i = 0; i < 4; i++) {
-            stats[i] /= totalPixels;
-        }
-        
-        // Preencher resultado
-        for (int i = 0; i < 64; i++) {
-            result[i] = (byte) (stats[i % 4]);
-        }
-        
-        return result;
+
+        return template;
     }
     
     /**

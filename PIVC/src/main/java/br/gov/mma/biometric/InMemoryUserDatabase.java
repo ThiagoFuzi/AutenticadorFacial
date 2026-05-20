@@ -186,14 +186,14 @@ public class InMemoryUserDatabase implements UserDatabase {
      * Retorna o threshold de similaridade baseado no tipo biométrico.
      * 
      * @param type tipo biométrico
-     * @return threshold de similaridade (0.85 para FINGERPRINT, 0.88 para FACIAL_RECOGNITION, 0.92 para IRIS_SCAN)
+     * @return threshold de similaridade (0.85 para FINGERPRINT, 0.55 para FACIAL_RECOGNITION, 0.92 para IRIS_SCAN)
      */
     private double getThresholdForType(BiometricType type) {
         switch (type) {
             case FINGERPRINT:
                 return 0.85;
             case FACIAL_RECOGNITION:
-                return 0.88;
+                return 0.55; // Calibrado com medidas reais (LBP + blur + chi-quadrado)
             case IRIS_SCAN:
                 return 0.92;
             default:

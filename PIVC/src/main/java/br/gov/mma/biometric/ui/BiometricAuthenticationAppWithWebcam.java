@@ -18,6 +18,7 @@ import java.awt.event.*;
 public class BiometricAuthenticationAppWithWebcam extends JFrame {
     
     private final BiometricAuthenticator authenticator;
+    private final UserDatabase userDatabase;
     private BiometricScanner scanner;
     private final CryptoService cryptoService;
     private final DeterministicTemplateGenerator templateGenerator;
@@ -37,11 +38,11 @@ public class BiometricAuthenticationAppWithWebcam extends JFrame {
     public BiometricAuthenticationAppWithWebcam() throws CryptoException {
         // Inicializar componentes do sistema
         this.cryptoService = new CryptoServiceImpl();
-        UserDatabase userDatabase = new InMemoryUserDatabase(cryptoService);
+        this.userDatabase = new InMemoryUserDatabase(cryptoService);
         SessionManager sessionManager = new SessionManagerImpl();
         AuditLog auditLog = new AuditLogImpl();
         this.templateGenerator = new DeterministicTemplateGeneratorImpl();
-        
+
         this.authenticator = new BiometricAuthenticatorImpl(
             userDatabase, sessionManager, auditLog, cryptoService, templateGenerator
         );
@@ -89,9 +90,6 @@ public class BiometricAuthenticationAppWithWebcam extends JFrame {
         
         // Criar interface
         createUI();
-        
-        // Cadastrar usuários de exemplo
-        cadastrarUsuariosExemplo();
     }
     
     /**
@@ -364,7 +362,7 @@ public class BiometricAuthenticationAppWithWebcam extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 6;
         gbc.gridwidth = 2;
-        JButton enrollButton = createStyledButton("Capturar e Cadastrar", new Color(0, 102, 204));
+        JButton enrollButton = createStyledButton("Capturar e Cadastrar", new Color(255, 140, 0));
         enrollButton.addActionListener(e -> realizarCadastro(
             userIdField.getText(),
             nameField.getText(),
@@ -479,56 +477,51 @@ public class BiometricAuthenticationAppWithWebcam extends JFrame {
             // Criar usuário
             User user = new User(userId, name, role, accessLevel, null, BiometricType.FACIAL_RECOGNITION, true);
             
-            // Cadastrar
+            // Checagem prévia: ID duplicado vs biometria duplicada — pra mostrar
+            // mensagem específica em vez do enigmático "falha no cadastro".
+            if (userDatabase.findUserById(userId).isPresent()) {
+                JOptionPane.showMessageDialog(this,
+                    "❌ ID \"" + userId + "\" já está cadastrado.\nUse um ID diferente.",
+                    "Erro", JOptionPane.ERROR_MESSAGE);
+                log("Cadastro recusado: ID duplicado (" + userId + ")");
+                return;
+            }
+
+            java.util.Optional<User> bioConflito = userDatabase.findUserByBiometric(
+                biometricData.getTemplate(), BiometricType.FACIAL_RECOGNITION);
+            if (bioConflito.isPresent()) {
+                User existente = bioConflito.get();
+                JOptionPane.showMessageDialog(this,
+                    "❌ Sua face foi reconhecida como já cadastrada para:\n\n" +
+                    "Nome: " + existente.getName() + "\n" +
+                    "ID: " + existente.getUserId() + "\n\n" +
+                    "Se esse não é você, o discriminador está dando falso positivo —\n" +
+                    "veja o console pra ver o score de similaridade (linha [Matcher] chi²).",
+                    "Biometria já cadastrada", JOptionPane.WARNING_MESSAGE);
+                log("Cadastro recusado: biometria conflita com " + existente.getUserId());
+                return;
+            }
+
             boolean success = authenticator.enrollUser(user, biometricData);
-            
+
             if (success) {
                 String message = "✅ CADASTRO BEM-SUCEDIDO!\n\n" +
                                "Usuário: " + name + "\n" +
                                "ID: " + userId + "\n" +
                                "Nível de Acesso: " + accessLevel.getDescription();
-                
+
                 JOptionPane.showMessageDialog(this, message, "Sucesso", JOptionPane.INFORMATION_MESSAGE);
                 log("Cadastro bem-sucedido: " + name);
             } else {
-                JOptionPane.showMessageDialog(this, "Falha no cadastro. Verifique se o usuário já existe.", 
-                                            "Erro", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this,
+                    "Falha no cadastro. Verifique qualidade da captura e o console.",
+                    "Erro", JOptionPane.ERROR_MESSAGE);
                 log("Falha no cadastro de " + name);
             }
             
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, "Erro: " + e.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE);
             log("Erro durante cadastro: " + e.getMessage());
-        }
-    }
-    
-    private void cadastrarUsuariosExemplo() {
-        try {
-            // Usuário 1: Funcionário Público
-            User user1 = new User("USER-001", "João Silva", "Funcionário Público", 
-                                 AccessLevel.PUBLIC, null, BiometricType.FACIAL_RECOGNITION, true);
-            BiometricData bio1 = new BiometricData(templateGenerator.generateDeterministicTemplate("USER-001"), 
-                                                   BiometricType.FACIAL_RECOGNITION, 0.95);
-            authenticator.enrollUser(user1, bio1);
-            
-            // Usuário 2: Diretora
-            User user2 = new User("DIR-001", "Maria Santos", "Diretora de Divisão", 
-                                 AccessLevel.RESTRICTED, null, BiometricType.FACIAL_RECOGNITION, true);
-            BiometricData bio2 = new BiometricData(templateGenerator.generateDeterministicTemplate("DIR-001"), 
-                                                   BiometricType.FACIAL_RECOGNITION, 0.92);
-            authenticator.enrollUser(user2, bio2);
-            
-            // Usuário 3: Ministro
-            User user3 = new User("MIN-001", "Carlos Oliveira", "Ministro do Meio Ambiente", 
-                                 AccessLevel.CONFIDENTIAL, null, BiometricType.FACIAL_RECOGNITION, true);
-            BiometricData bio3 = new BiometricData(templateGenerator.generateDeterministicTemplate("MIN-001"), 
-                                                   BiometricType.FACIAL_RECOGNITION, 0.98);
-            authenticator.enrollUser(user3, bio3);
-            
-            log("Usuários de exemplo cadastrados com sucesso");
-            
-        } catch (Exception e) {
-            log("Erro ao cadastrar usuários de exemplo: " + e.getMessage());
         }
     }
     
