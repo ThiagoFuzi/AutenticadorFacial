@@ -86,24 +86,27 @@ public class DynamicInfoPanelImpl extends JPanel implements DynamicInfoPanel {
     @Override
     public void exibirMensagemSemAutenticacao() {
         String mensagem = "═══════════════════════════════════════════════════════════\n" +
-                         "INFORMAÇÕES DO SISTEMA\n" +
+                         "SISTEMA DE CONTROLE DE AGROTÓXICOS PROIBIDOS — MMA\n" +
                          "═══════════════════════════════════════════════════════════\n\n" +
-                         "Aguardando autenticação...\n\n" +
-                         "Para visualizar informações específicas, você precisa:\n\n" +
-                         "1. Ir para a aba 'Autenticação'\n" +
-                         "2. Selecionar o nível de acesso desejado\n" +
-                         "3. Clicar em 'Capturar e Autenticar'\n" +
-                         "4. Posicionar seu rosto na frente da webcam\n\n" +
-                         "Após autenticação bem-sucedida, as informações específicas\n" +
-                         "para seu nível de acesso serão exibidas aqui.\n\n" +
+                         "Base de dados sobre propriedades rurais com uso de agrotóxicos\n" +
+                         "proibidos e seus impactos em lençóis freáticos, rios e mares.\n\n" +
+                         "Aguardando autenticação biométrica...\n\n" +
+                         "Para acessar:\n" +
+                         "  1. Aba 'Autenticação'\n" +
+                         "  2. Selecione o nível solicitado\n" +
+                         "  3. Clique em 'Capturar e Autenticar'\n" +
+                         "  4. Posicione seu rosto na webcam\n\n" +
                          "NÍVEIS DE ACESSO:\n\n" +
-                         "• PÚBLICO (Nível 1)\n" +
-                         "  Informações gerais acessíveis a todos os funcionários\n\n" +
-                         "• RESTRITO (Nível 2)\n" +
-                         "  Informações restritas aos diretores de divisões\n\n" +
-                         "• CONFIDENCIAL (Nível 3)\n" +
-                         "  Informações confidenciais acessíveis apenas ao Ministro";
-        
+                         "• NÍVEL 1 — PÚBLICO\n" +
+                         "  Legislação, impactos ambientais, canais de denúncia e\n" +
+                         "  estatísticas agregadas. Aberto a todos os funcionários.\n\n" +
+                         "• NÍVEL 2 — RESTRITO (Diretores de Divisão)\n" +
+                         "  Substâncias monitoradas, contaminação por bacia hidrográfica,\n" +
+                         "  campanhas de fiscalização em curso e desempenho por divisão.\n\n" +
+                         "• NÍVEL 3 — CONFIDENCIAL (Ministro)\n" +
+                         "  Dossiês nominais de propriedades sob investigação, operações\n" +
+                         "  sigilosas, articulação política e decisões estratégicas.";
+
         areaConteudo.setText(mensagem);
         areaConteudo.setCaretPosition(0);
     }
