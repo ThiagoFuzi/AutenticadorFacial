@@ -26,9 +26,10 @@ public class BiometricAuthenticationApp extends JFrame {
         UserDatabase userDatabase = new InMemoryUserDatabase(cryptoService);
         SessionManager sessionManager = new SessionManagerImpl();
         AuditLog auditLog = new AuditLogImpl();
+        DeterministicTemplateGenerator templateGenerator = new DeterministicTemplateGeneratorImpl();
         
         this.authenticator = new BiometricAuthenticatorImpl(
-            userDatabase, sessionManager, auditLog, cryptoService
+            userDatabase, sessionManager, auditLog, cryptoService, templateGenerator
         );
         this.scanner = new FacialRecognitionScanner();
         
